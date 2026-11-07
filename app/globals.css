@@ -1,0 +1,166 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/*
+ * Riso / gig-poster look: ink on newsprint, two fluorescent spot colours,
+ * halftone + hatching, taped-on labels and slightly off-register prints.
+ */
+
+:root {
+  --paper: #efe8d8;
+  --ink: #141210;
+  --red: #ff4423;
+  --yellow: #f3ea4c;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-red: var(--red);
+  --color-yellow: var(--yellow);
+  --font-sans: var(--font-archivo);
+  --font-marker: var(--font-marker);
+  --font-mono: var(--font-space-mono);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Paper grain over everything */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .08 0 0 0 0 .07 0 0 0 0 .06 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::selection {
+  background: var(--yellow);
+  color: var(--ink);
+}
+
+/* Type widths (Archivo variable `wdth` axis) */
+@utility font-wide {
+  font-stretch: 125%;
+}
+@utility font-narrow {
+  font-stretch: 62%;
+}
+
+/* Riso misregistration: a red plate printed a few px off */
+@utility misprint {
+  text-shadow: 0.05em 0.04em 0 var(--red);
+}
+
+/* Black tape strip with knocked-out lettering, stuck on slightly crooked */
+@utility tape {
+  display: inline-block;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0.15em 0.45em 0.1em;
+  text-transform: uppercase;
+  font-stretch: 75%;
+  font-weight: 800;
+  line-height: 1;
+  transform: rotate(-2deg);
+}
+
+@utility halftone {
+  background-image: radial-gradient(var(--ink) 1.3px, transparent 1.7px);
+  background-size: 9px 9px;
+}
+
+@utility hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--ink) 0 1.5px,
+    transparent 1.5px 7px
+  );
+}
+
+/* Wobbly, hand-inked edges — the #rough filter lives in the site layout */
+@utility rough {
+  filter: url(#rough);
+}
+
+/*
+ * Duotone photos: a grayscale, high-contrast print multiplied onto a spot
+ * colour, with a halftone screen over the top.
+ */
+@utility duotone {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  & img {
+    filter: grayscale(1) contrast(1.6) brightness(1.1);
+    mix-blend-mode: multiply;
+  }
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgb(0 0 0 / 0.35) 1px, transparent 1.4px);
+    background-size: 5px 5px;
+    mix-blend-mode: multiply;
+    pointer-events: none;
+  }
+}
+
+/* Button: black block with an offset red print behind it */
+@utility btn-ink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-space-mono), monospace;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  box-shadow: 5px 5px 0 var(--red);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+  &:hover {
+    transform: translate(-2px, -2px) rotate(-1.5deg);
+    box-shadow: 8px 8px 0 var(--red);
+  }
+  &:active {
+    transform: translate(3px, 3px);
+    box-shadow: 0 0 0 var(--red);
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@utility animate-marquee {
+  animation: marquee 40s linear infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+.prose {
+  --tw-prose-body: var(--ink);
+  --tw-prose-headings: var(--ink);
+  --tw-prose-links: var(--ink);
+  --tw-prose-bold: var(--ink);
+  --tw-prose-quotes: var(--ink);
+  --tw-prose-bullets: var(--ink);
+  --tw-prose-counters: var(--ink);
+  --tw-prose-captions: var(--ink);
+  --tw-prose-quote-borders: var(--red);
+}
