@@ -1,5 +1,6 @@
 import NextLink from "next/link";
 
+import { MicLogo } from "@/components/layout/MicLogo";
 import { SanityImage } from "@/components/ui/SanityImage";
 import type { SiteSettings } from "@/sanity/lib/types";
 
@@ -12,17 +13,20 @@ const NAV = [
 export function Header({ settings }: { settings?: SiteSettings }) {
   return (
     <header className="border-b-[3px] border-ink">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-x-8 gap-y-3 px-4 py-4 sm:px-6">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-8 gap-y-3 px-4 py-4 sm:px-6">
         <NextLink
           href="/"
-          className="flex items-center gap-3 font-wide text-2xl leading-none font-black uppercase sm:text-3xl"
+          aria-label={`${settings?.title ?? "Comedy"}, home`}
+          className="group block -rotate-3 transition-transform duration-150 hover:rotate-3"
         >
-          {settings?.logo && (
-            <span className="relative block h-10 w-10">
-              <SanityImage image={settings.logo} alt="" sizes="40px" className="object-contain" />
+          {/* An uploaded logo (Site settings) replaces the default mic */}
+          {settings?.logo ? (
+            <span className="relative block h-10 w-10 sm:h-12 sm:w-12">
+              <SanityImage image={settings.logo} alt="" sizes="48px" className="object-contain" />
             </span>
+          ) : (
+            <MicLogo className="block h-10 w-10 sm:h-12 sm:w-12" />
           )}
-          {settings?.title ?? "Comedy"}
         </NextLink>
         <nav className="flex gap-5 font-mono text-sm font-bold uppercase">
           {NAV.map((item) => (

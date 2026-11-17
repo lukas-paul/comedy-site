@@ -33,7 +33,7 @@ export function HomeView({
       <section className="mx-auto max-w-6xl px-4 pt-10 pb-16 sm:px-6 sm:pt-14">
         <h1
           data-sanity={attr("headline")}
-          className="misprint font-wide text-[clamp(3rem,11vw,9.5rem)] leading-[0.82] font-black tracking-tight uppercase"
+          className="misprint font-wide text-[clamp(2.5rem,8.5vw,7.5rem)] leading-[0.82] font-black tracking-tight uppercase"
         >
           {home?.headline ?? "Comedy"}
         </h1>
