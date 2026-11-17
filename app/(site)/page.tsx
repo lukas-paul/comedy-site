@@ -22,11 +22,18 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [{ data: home }, { data: events }, { data: shows }] = await Promise.all([
+  const [{ data: home }, { data: events }, { data: shows }, now] = await Promise.all([
     sanityFetch({ query: HOME_QUERY, stega: false }),
     sanityFetch({ query: UPCOMING_EVENTS_QUERY, stega: false }),
     sanityFetch({ query: SHOWS_QUERY, stega: false }),
+    // One timestamp per render: the HTML is cached, and the client-side
+    // date filter must agree with it about what's upcoming.
+    renderTime(),
   ]);
 
-  return <HomeView home={home} events={events} shows={shows} />;
+  return <HomeView home={home} events={events} shows={shows} now={now} />;
+}
+
+async function renderTime() {
+  return Date.now();
 }

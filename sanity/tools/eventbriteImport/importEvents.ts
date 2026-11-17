@@ -18,6 +18,7 @@ type VenueDoc = {
   name?: string;
   address?: string;
   postalCode?: string;
+  hasLocation?: boolean;
 };
 
 /** A venue to reference: its published ID, and whether that version exists yet. */
@@ -38,7 +39,7 @@ export async function importEvents(
   onProgress?: (done: number) => void
 ): Promise<ImportResult[]> {
   const venues = await client.fetch<VenueDoc[]>(
-    `*[_type == "venue"]{ _id, name, address, postalCode }`
+    `*[_type == "venue"]{ _id, name, address, postalCode, "hasLocation": defined(location) }`
   );
   const venueRefs = new Map<string, Promise<VenueRef>>();
   const assetIds = new Map<string, Promise<string>>();
@@ -120,6 +121,14 @@ async function findOrCreateVenue(
       : undefined);
   if (match) {
     const id = match._id.replace(/^drafts\./, "");
+    // Backfill coordinates on venues created before they were imported.
+    if (!match.hasLocation && venue.lat !== undefined && venue.lng !== undefined) {
+      await client
+        .patch(match._id)
+        .setIfMissing({ location: { _type: "geopoint", lat: venue.lat, lng: venue.lng } })
+        .commit()
+        .catch(() => undefined);
+    }
     return { id, published: venues.some((v) => v._id === id) };
   }
 
@@ -132,6 +141,9 @@ async function findOrCreateVenue(
     ...(venue.address ? { address: venue.address } : {}),
     ...(venue.postalCode ? { postalCode: venue.postalCode } : {}),
     ...(venue.city ? { city: venue.city } : {}),
+    ...(venue.lat !== undefined && venue.lng !== undefined
+      ? { location: { _type: "geopoint", lat: venue.lat, lng: venue.lng } }
+      : {}),
     mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
       [venue.name, venue.address, [venue.postalCode, venue.city].filter(Boolean).join(" ")]
         .filter(Boolean)

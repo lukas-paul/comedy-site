@@ -1,6 +1,8 @@
 import { MicrophoneIcon } from "@sanity/icons/Microphone";
 import { defineField, defineType } from "sanity";
 
+import { SHOW_TYPES, showTypeTitle } from "../../../lib/showTypes";
+
 export const show = defineType({
   name: "show",
   title: "Show",
@@ -21,6 +23,13 @@ export const show = defineType({
       description: "Served at /shows/<slug>.",
       options: { source: "title", maxLength: 96 },
       validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: "showType",
+      title: "Show type",
+      type: "string",
+      description: "The format. Visitors can filter by it.",
+      options: { list: SHOW_TYPES.map(({ value, title }) => ({ value, title })), layout: "radio" },
     }),
     defineField({
       name: "tagline",
@@ -59,6 +68,13 @@ export const show = defineType({
     }),
   ],
   preview: {
-    select: { title: "title", subtitle: "schedule", media: "image" },
+    select: { title: "title", schedule: "schedule", showType: "showType", media: "image" },
+    prepare({ title, schedule, showType, media }) {
+      return {
+        title,
+        subtitle: [showTypeTitle(showType), schedule].filter(Boolean).join(" · "),
+        media,
+      };
+    },
   },
 });

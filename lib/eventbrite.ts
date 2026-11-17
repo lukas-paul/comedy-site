@@ -16,6 +16,8 @@ export type EventbriteVenue = {
   postalCode?: string;
   city?: string;
   country?: string;
+  lat?: number;
+  lng?: number;
 };
 
 export type EventbriteEvent = {
@@ -270,7 +272,18 @@ function mapVenue(location: unknown): EventbriteVenue | undefined {
     postalCode: optional(postalCode),
     city: optional(str(addr.addressLocality)),
     country: optional(str(addr.addressCountry)),
+    ...mapGeo(place.geo),
   };
+}
+
+function mapGeo(geo: unknown): { lat?: number; lng?: number } {
+  if (!isObj(geo)) return {};
+  const lat = Number(geo.latitude);
+  const lng = Number(geo.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return {};
+  }
+  return { lat, lng };
 }
 
 // --- helpers ---------------------------------------------------------------

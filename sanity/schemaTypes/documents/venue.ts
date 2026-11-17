@@ -1,6 +1,8 @@
 import { PinIcon } from "@sanity/icons/Pin";
 import { defineField, defineType } from "sanity";
 
+import { LocationInput } from "../../components/LocationInput";
+
 export const venue = defineType({
   name: "venue",
   title: "Venue",
@@ -27,6 +29,13 @@ export const venue = defineType({
       name: "city",
       title: "City",
       type: "string",
+    }),
+    defineField({
+      name: "location",
+      title: "Location",
+      type: "geopoint",
+      description: "Puts the venue on the site's map. Fill in the address, then look it up.",
+      components: { input: LocationInput },
     }),
     defineField({
       name: "mapUrl",

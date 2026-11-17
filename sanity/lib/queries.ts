@@ -37,8 +37,8 @@ const eventCardFields = /* groq */ `
   ticketUrl,
   price,
   "image": coalesce(image, show->image),
-  venue->{ name, city },
-  show->{ title, "slug": slug.current }
+  venue->{ _id, name, address, city, location },
+  show->{ title, "slug": slug.current, showType }
 `;
 
 export const HOME_QUERY = defineQuery(/* groq */ `
@@ -65,6 +65,7 @@ export const SHOWS_QUERY = defineQuery(/* groq */ `
       _id,
       title,
       "slug": slug.current,
+      showType,
       tagline,
       schedule,
       image,
@@ -79,6 +80,7 @@ export const SHOW_QUERY = defineQuery(/* groq */ `
     _type,
     title,
     "slug": slug.current,
+    showType,
     tagline,
     schedule,
     image,
@@ -108,7 +110,7 @@ export const EVENT_QUERY = defineQuery(/* groq */ `
     "image": coalesce(image, show->image),
     "description": coalesce(description, show->description)[]{ ${blockContentFields} },
     venue->{ name, address, postalCode, city, mapUrl, website },
-    show->{ title, "slug": slug.current, tagline, schedule },
+    show->{ title, "slug": slug.current, showType, tagline, schedule },
     seo
   }
 `);

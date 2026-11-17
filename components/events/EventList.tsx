@@ -8,13 +8,16 @@ export function EventList({
   events,
   hideShow = false,
   emptyText = "Nothing booked right now. We're probably writing.",
+  now,
 }: {
   events: EventCardData[];
   /** On a show's own page the show name is redundant */
   hideShow?: boolean;
   emptyText?: string;
+  /** Reference time; pass the server's when rendering inside a client component */
+  now?: number;
 }) {
-  const upcoming = events.filter((event) => isUpcoming(event.startsAt));
+  const upcoming = events.filter((event) => isUpcoming(event.startsAt, now));
 
   if (upcoming.length === 0) {
     return <p className="font-marker text-2xl">{emptyText}</p>;

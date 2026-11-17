@@ -1,6 +1,6 @@
 import NextLink from "next/link";
 
-import { EventList } from "@/components/events/EventList";
+import { DatesAndMap } from "@/components/events/DatesAndMap";
 import { ShowCard } from "@/components/events/ShowCard";
 import { TicketButton } from "@/components/events/TicketButton";
 import { Marquee } from "@/components/layout/Marquee";
@@ -15,14 +15,17 @@ export function HomeView({
   home,
   events,
   shows,
+  now,
 }: {
   home: HomeData | null;
   events: EventCardData[];
   shows: ShowCardData[];
+  /** Render time, shared with the client-side date filter */
+  now: number;
 }) {
   const attr = (path: string) =>
     home ? dataAttr({ id: home._id, type: home._type, path }) : undefined;
-  const upcoming = events.filter((event) => isUpcoming(event.startsAt));
+  const upcoming = events.filter((event) => isUpcoming(event.startsAt, now));
   const next = upcoming.find((event) => event.status !== "cancelled");
 
   return (
@@ -79,12 +82,7 @@ export function HomeView({
 
       <Marquee events={events} />
 
-      <section id="events" className="mx-auto max-w-6xl scroll-mt-6 px-4 pt-20 sm:px-6">
-        <SectionHeading count={upcoming.length} note="come early, sit front row">
-          Dates
-        </SectionHeading>
-        <EventList events={events} />
-      </section>
+      <DatesAndMap events={events} now={now} />
 
       {shows.length > 0 && (
         <section id="shows" className="mx-auto max-w-6xl scroll-mt-6 px-4 pt-24 sm:px-6">

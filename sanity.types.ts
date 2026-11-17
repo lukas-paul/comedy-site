@@ -190,8 +190,16 @@ export type Venue = {
   address?: string;
   postalCode?: string;
   city?: string;
+  location?: Geopoint;
   mapUrl?: string;
   website?: string;
+};
+
+export type Geopoint = {
+  _type: "geopoint";
+  lat?: number;
+  lng?: number;
+  alt?: number;
 };
 
 export type Slug = {
@@ -208,6 +216,7 @@ export type Show = {
   _rev: string;
   title: string;
   slug: Slug;
+  showType?: "openMic" | "showcase" | "showUpSignUp" | "solo" | "themeShow";
   tagline?: string;
   schedule?: string;
   image?: {
@@ -335,13 +344,6 @@ export type SanityImageAsset = {
   source?: SanityAssetSourceData;
 };
 
-export type Geopoint = {
-  _type: "geopoint";
-  lat?: number;
-  lng?: number;
-  alt?: number;
-};
-
 export type AllSanitySchemaTypes =
   | SanityImageAssetReference
   | RichTextImage
@@ -357,6 +359,7 @@ export type AllSanitySchemaTypes =
   | VenueReference
   | Event
   | Venue
+  | Geopoint
   | Slug
   | Show
   | Home
@@ -366,8 +369,7 @@ export type AllSanitySchemaTypes =
   | SanityImageMetadata
   | SanityFileAsset
   | SanityAssetSourceData
-  | SanityImageAsset
-  | Geopoint;
+  | SanityImageAsset;
 
 // Source: sanity/lib/queries.ts
 // Variable: HOME_QUERY
@@ -444,7 +446,7 @@ export type HOME_QUERY_RESULT = {
 
 // Source: sanity/lib/queries.ts
 // Variable: UPCOMING_EVENTS_QUERY
-// Query: *[  _type == "event"  && defined(slug.current)  && defined(startsAt)  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7] | order(startsAt asc) {   _id,  "title": coalesce(title, show->title),  "slug": slug.current,  startsAt,  status,  ticketUrl,  price,  "image": coalesce(image, show->image),  venue->{ name, city },  show->{ title, "slug": slug.current } }
+// Query: *[  _type == "event"  && defined(slug.current)  && defined(startsAt)  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7] | order(startsAt asc) {   _id,  "title": coalesce(title, show->title),  "slug": slug.current,  startsAt,  status,  ticketUrl,  price,  "image": coalesce(image, show->image),  venue->{ _id, name, address, city, location },  show->{ title, "slug": slug.current, showType } }
 export type UPCOMING_EVENTS_QUERY_RESULT = Array<{
   _id: string;
   title: string | null;
@@ -462,22 +464,29 @@ export type UPCOMING_EVENTS_QUERY_RESULT = Array<{
     _type: "image";
   } | null;
   venue: {
+    _id: string;
     name: string;
+    address: string | null;
     city: string | null;
+    location: Geopoint | null;
   } | null;
   show: {
     title: string;
     slug: string;
+    showType:
+      "openMic" | "showcase" | "showUpSignUp" | "solo" | "themeShow" | null;
   } | null;
 }>;
 
 // Source: sanity/lib/queries.ts
 // Variable: SHOWS_QUERY
-// Query: *[_type == "show" && defined(slug.current)]    | order(coalesce(order, 9999) asc, title asc) {      _id,      title,      "slug": slug.current,      tagline,      schedule,      image,      "dates": *[  _type == "event"  && defined(slug.current)  && defined(startsAt)  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7 && show._ref == ^._id && status != "cancelled"]        | order(startsAt asc).startsAt    }
+// Query: *[_type == "show" && defined(slug.current)]    | order(coalesce(order, 9999) asc, title asc) {      _id,      title,      "slug": slug.current,      showType,      tagline,      schedule,      image,      "dates": *[  _type == "event"  && defined(slug.current)  && defined(startsAt)  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7 && show._ref == ^._id && status != "cancelled"]        | order(startsAt asc).startsAt    }
 export type SHOWS_QUERY_RESULT = Array<{
   _id: string;
   title: string;
   slug: string;
+  showType:
+    "openMic" | "showcase" | "showUpSignUp" | "solo" | "themeShow" | null;
   tagline: string | null;
   schedule: string | null;
   image: {
@@ -493,12 +502,14 @@ export type SHOWS_QUERY_RESULT = Array<{
 
 // Source: sanity/lib/queries.ts
 // Variable: SHOW_QUERY
-// Query: *[_type == "show" && slug.current == $slug][0]{    _id,    _type,    title,    "slug": slug.current,    tagline,    schedule,    image,    description[]{   ...,  _type == "richTextImage" => {    ...,    asset->  } },    seo,    "events": *[  _type == "event"  && defined(slug.current)  && defined(startsAt)  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7 && show._ref == ^._id]      | order(startsAt asc) {   _id,  "title": coalesce(title, show->title),  "slug": slug.current,  startsAt,  status,  ticketUrl,  price,  "image": coalesce(image, show->image),  venue->{ name, city },  show->{ title, "slug": slug.current } }  }
+// Query: *[_type == "show" && slug.current == $slug][0]{    _id,    _type,    title,    "slug": slug.current,    showType,    tagline,    schedule,    image,    description[]{   ...,  _type == "richTextImage" => {    ...,    asset->  } },    seo,    "events": *[  _type == "event"  && defined(slug.current)  && defined(startsAt)  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7 && show._ref == ^._id]      | order(startsAt asc) {   _id,  "title": coalesce(title, show->title),  "slug": slug.current,  startsAt,  status,  ticketUrl,  price,  "image": coalesce(image, show->image),  venue->{ _id, name, address, city, location },  show->{ title, "slug": slug.current, showType } }  }
 export type SHOW_QUERY_RESULT = {
   _id: string;
   _type: "show";
   title: string;
   slug: string;
+  showType:
+    "openMic" | "showcase" | "showUpSignUp" | "solo" | "themeShow" | null;
   tagline: string | null;
   schedule: string | null;
   image: {
@@ -579,12 +590,17 @@ export type SHOW_QUERY_RESULT = {
       _type: "image";
     } | null;
     venue: {
+      _id: string;
       name: string;
+      address: string | null;
       city: string | null;
+      location: Geopoint | null;
     } | null;
     show: {
       title: string;
       slug: string;
+      showType:
+        "openMic" | "showcase" | "showUpSignUp" | "solo" | "themeShow" | null;
     } | null;
   }>;
 } | null;
@@ -596,7 +612,7 @@ export type SHOW_SLUGS_QUERY_RESULT = Array<string>;
 
 // Source: sanity/lib/queries.ts
 // Variable: EVENT_QUERY
-// Query: *[_type == "event" && slug.current == $slug][0]{    _id,    _type,    "title": coalesce(title, show->title),    "slug": slug.current,    startsAt,    doorsAt,    status,    ticketUrl,    price,    lineup,    "image": coalesce(image, show->image),    "description": coalesce(description, show->description)[]{   ...,  _type == "richTextImage" => {    ...,    asset->  } },    venue->{ name, address, postalCode, city, mapUrl, website },    show->{ title, "slug": slug.current, tagline, schedule },    seo  }
+// Query: *[_type == "event" && slug.current == $slug][0]{    _id,    _type,    "title": coalesce(title, show->title),    "slug": slug.current,    startsAt,    doorsAt,    status,    ticketUrl,    price,    lineup,    "image": coalesce(image, show->image),    "description": coalesce(description, show->description)[]{   ...,  _type == "richTextImage" => {    ...,    asset->  } },    venue->{ name, address, postalCode, city, mapUrl, website },    show->{ title, "slug": slug.current, showType, tagline, schedule },    seo  }
 export type EVENT_QUERY_RESULT = {
   _id: string;
   _type: "event";
@@ -679,6 +695,8 @@ export type EVENT_QUERY_RESULT = {
   show: {
     title: string;
     slug: string;
+    showType:
+      "openMic" | "showcase" | "showUpSignUp" | "solo" | "themeShow" | null;
     tagline: string | null;
     schedule: string | null;
   } | null;
@@ -753,11 +771,11 @@ import "@sanity/client";
 declare module "@sanity/client" {
   interface SanityQueries {
     '\n  *[_type == "home" && _id == "home"][0]{\n    _id,\n    _type,\n    headline,\n    scribble,\n    intro,\n    heroImage,\n    aboutHeading,\n    about[]{ \n  ...,\n  _type == "richTextImage" => {\n    ...,\n    asset->\n  }\n },\n    seo\n  }\n': HOME_QUERY_RESULT;
-    '\n  *[\n  _type == "event"\n  && defined(slug.current)\n  && defined(startsAt)\n  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7\n] | order(startsAt asc) { \n  _id,\n  "title": coalesce(title, show->title),\n  "slug": slug.current,\n  startsAt,\n  status,\n  ticketUrl,\n  price,\n  "image": coalesce(image, show->image),\n  venue->{ name, city },\n  show->{ title, "slug": slug.current }\n }\n': UPCOMING_EVENTS_QUERY_RESULT;
-    '\n  *[_type == "show" && defined(slug.current)]\n    | order(coalesce(order, 9999) asc, title asc) {\n      _id,\n      title,\n      "slug": slug.current,\n      tagline,\n      schedule,\n      image,\n      "dates": *[\n  _type == "event"\n  && defined(slug.current)\n  && defined(startsAt)\n  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7\n && show._ref == ^._id && status != "cancelled"]\n        | order(startsAt asc).startsAt\n    }\n': SHOWS_QUERY_RESULT;
-    '\n  *[_type == "show" && slug.current == $slug][0]{\n    _id,\n    _type,\n    title,\n    "slug": slug.current,\n    tagline,\n    schedule,\n    image,\n    description[]{ \n  ...,\n  _type == "richTextImage" => {\n    ...,\n    asset->\n  }\n },\n    seo,\n    "events": *[\n  _type == "event"\n  && defined(slug.current)\n  && defined(startsAt)\n  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7\n && show._ref == ^._id]\n      | order(startsAt asc) { \n  _id,\n  "title": coalesce(title, show->title),\n  "slug": slug.current,\n  startsAt,\n  status,\n  ticketUrl,\n  price,\n  "image": coalesce(image, show->image),\n  venue->{ name, city },\n  show->{ title, "slug": slug.current }\n }\n  }\n': SHOW_QUERY_RESULT;
+    '\n  *[\n  _type == "event"\n  && defined(slug.current)\n  && defined(startsAt)\n  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7\n] | order(startsAt asc) { \n  _id,\n  "title": coalesce(title, show->title),\n  "slug": slug.current,\n  startsAt,\n  status,\n  ticketUrl,\n  price,\n  "image": coalesce(image, show->image),\n  venue->{ _id, name, address, city, location },\n  show->{ title, "slug": slug.current, showType }\n }\n': UPCOMING_EVENTS_QUERY_RESULT;
+    '\n  *[_type == "show" && defined(slug.current)]\n    | order(coalesce(order, 9999) asc, title asc) {\n      _id,\n      title,\n      "slug": slug.current,\n      showType,\n      tagline,\n      schedule,\n      image,\n      "dates": *[\n  _type == "event"\n  && defined(slug.current)\n  && defined(startsAt)\n  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7\n && show._ref == ^._id && status != "cancelled"]\n        | order(startsAt asc).startsAt\n    }\n': SHOWS_QUERY_RESULT;
+    '\n  *[_type == "show" && slug.current == $slug][0]{\n    _id,\n    _type,\n    title,\n    "slug": slug.current,\n    showType,\n    tagline,\n    schedule,\n    image,\n    description[]{ \n  ...,\n  _type == "richTextImage" => {\n    ...,\n    asset->\n  }\n },\n    seo,\n    "events": *[\n  _type == "event"\n  && defined(slug.current)\n  && defined(startsAt)\n  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7\n && show._ref == ^._id]\n      | order(startsAt asc) { \n  _id,\n  "title": coalesce(title, show->title),\n  "slug": slug.current,\n  startsAt,\n  status,\n  ticketUrl,\n  price,\n  "image": coalesce(image, show->image),\n  venue->{ _id, name, address, city, location },\n  show->{ title, "slug": slug.current, showType }\n }\n  }\n': SHOW_QUERY_RESULT;
     '\n  *[_type == "show" && defined(slug.current)].slug.current\n': SHOW_SLUGS_QUERY_RESULT;
-    '\n  *[_type == "event" && slug.current == $slug][0]{\n    _id,\n    _type,\n    "title": coalesce(title, show->title),\n    "slug": slug.current,\n    startsAt,\n    doorsAt,\n    status,\n    ticketUrl,\n    price,\n    lineup,\n    "image": coalesce(image, show->image),\n    "description": coalesce(description, show->description)[]{ \n  ...,\n  _type == "richTextImage" => {\n    ...,\n    asset->\n  }\n },\n    venue->{ name, address, postalCode, city, mapUrl, website },\n    show->{ title, "slug": slug.current, tagline, schedule },\n    seo\n  }\n': EVENT_QUERY_RESULT;
+    '\n  *[_type == "event" && slug.current == $slug][0]{\n    _id,\n    _type,\n    "title": coalesce(title, show->title),\n    "slug": slug.current,\n    startsAt,\n    doorsAt,\n    status,\n    ticketUrl,\n    price,\n    lineup,\n    "image": coalesce(image, show->image),\n    "description": coalesce(description, show->description)[]{ \n  ...,\n  _type == "richTextImage" => {\n    ...,\n    asset->\n  }\n },\n    venue->{ name, address, postalCode, city, mapUrl, website },\n    show->{ title, "slug": slug.current, showType, tagline, schedule },\n    seo\n  }\n': EVENT_QUERY_RESULT;
     '\n  *[\n  _type == "event"\n  && defined(slug.current)\n  && defined(startsAt)\n  && dateTime(startsAt) > dateTime(now()) - 60 * 60 * 24 * 7\n].slug.current\n': EVENT_SLUGS_QUERY_RESULT;
     '\n  *[_type == "siteSettings"][0]{\n    title,\n    description,\n    logo,\n    footerText,\n    footerLinks[]{ \n  _key,\n  label,\n  linkType,\n  openInNewTab,\n  externalUrl,\n  internalLink->{ _type, "slug": slug.current }\n },\n    socialLinks[]{ \n  _key,\n  label,\n  linkType,\n  openInNewTab,\n  externalUrl,\n  internalLink->{ _type, "slug": slug.current }\n }\n  }\n': SITE_SETTINGS_QUERY_RESULT;
   }

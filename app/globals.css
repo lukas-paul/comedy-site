@@ -164,3 +164,91 @@ body::after {
   --tw-prose-captions: var(--ink);
   --tw-prose-quote-borders: var(--red);
 }
+
+/* --- Venue map (Leaflet) ------------------------------------------------ */
+
+/* Tint the basemap so it reads as ink printed on the same paper */
+.venue-map.leaflet-container {
+  background: var(--paper);
+  font-family: var(--font-space-mono), monospace;
+}
+.venue-map .leaflet-tile-pane {
+  filter: grayscale(1) sepia(0.35) contrast(1.1);
+  mix-blend-mode: multiply;
+}
+.venue-map .leaflet-control-attribution {
+  background: rgb(239 232 216 / 0.85);
+  color: var(--ink);
+  font-size: 10px;
+}
+.venue-map .leaflet-control-attribution a {
+  color: var(--ink);
+}
+.venue-map .leaflet-bar {
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  box-shadow: none;
+}
+.venue-map .leaflet-bar a {
+  border-radius: 0 !important;
+  background: var(--paper);
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+.venue-map .leaflet-bar a:hover {
+  background: var(--yellow);
+}
+
+/* Venue pin: round sticker with the number of upcoming dates */
+.map-pin {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--ink);
+  border-radius: 9999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-archivo), sans-serif;
+  font-stretch: 62%;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 3px 3px 0 var(--red);
+  transition: transform 120ms ease;
+}
+.leaflet-marker-icon:hover .map-pin,
+.leaflet-marker-icon:focus-visible .map-pin {
+  transform: scale(1.12) rotate(-6deg);
+}
+.map-pin.is-selected {
+  background: var(--red);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  transform: scale(1.2);
+}
+
+/* The visitor's position */
+.map-you {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--ink);
+  border-radius: 9999px;
+  background: var(--yellow);
+  box-shadow: 0 0 0 6px rgb(243 234 76 / 0.45);
+}
+
+.leaflet-tooltip.map-tooltip {
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-space-mono), monospace;
+  font-weight: 700;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+.leaflet-tooltip-top.map-tooltip::before {
+  border-top-color: var(--ink);
+}
