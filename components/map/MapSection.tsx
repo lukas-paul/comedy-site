@@ -23,7 +23,16 @@ type Locate =
  * the full, interactive map in a modal, where visitors can also find the
  * shows closest to them.
  */
-export function MapSection({ venues }: { venues: MapVenue[] }) {
+export function MapSection({
+  venues,
+  filters,
+  emptyText = "No dates match these filters.",
+}: {
+  venues: MapVenue[];
+  /** Filter controls shown inside the big map (state lives with the caller) */
+  filters?: React.ReactNode;
+  emptyText?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [locate, setLocate] = useState<Locate>({ state: "idle" });
 
@@ -88,6 +97,8 @@ export function MapSection({ venues }: { venues: MapVenue[] }) {
       {open && (
         <MapModal
           venues={venues}
+          filters={filters}
+          emptyText={emptyText}
           locate={locate}
           onLocate={findNearMe}
           onClose={() => setOpen(false)}
@@ -99,11 +110,15 @@ export function MapSection({ venues }: { venues: MapVenue[] }) {
 
 function MapModal({
   venues,
+  filters,
+  emptyText,
   locate,
   onLocate,
   onClose,
 }: {
   venues: MapVenue[];
+  filters?: React.ReactNode;
+  emptyText: string;
   locate: Locate;
   onLocate: () => void;
   onClose: () => void;
@@ -181,6 +196,10 @@ function MapModal({
           </div>
         </header>
 
+        {filters && (
+          <div className="border-b-[3px] border-ink px-4 py-3 sm:px-5">{filters}</div>
+        )}
+
         <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)_360px] md:grid-rows-1">
           <div className="relative min-h-0 border-b-[3px] border-ink md:border-r-[3px] md:border-b-0">
             <VenueMap
@@ -209,6 +228,8 @@ function MapModal({
                 distance={selected.distance}
                 onBack={() => setSelectedId(null)}
               />
+            ) : sorted.length === 0 ? (
+              <p className="px-4 py-4 font-marker text-xl">{emptyText}</p>
             ) : (
               <ul>
                 {sorted.map(({ venue, distance }) => (

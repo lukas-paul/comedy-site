@@ -56,3 +56,13 @@ export function dateParts(iso: string) {
     year: format(iso, { year: "numeric" }),
   };
 }
+
+/** "2026-11-20" in the site's timezone, for same-day comparisons */
+export function dayKey(date: string | number) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: SITE_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(date));
+}

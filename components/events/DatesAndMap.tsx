@@ -5,46 +5,82 @@ import { useMemo, useState } from "react";
 import { EventList } from "@/components/events/EventList";
 import { MapSection } from "@/components/map/MapSection";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-import { isUpcoming } from "@/lib/dates";
+import { dayKey, isUpcoming } from "@/lib/dates";
 import { toMapVenues } from "@/lib/geo";
 import { SHOW_TYPES, type ShowType } from "@/lib/showTypes";
 import type { EventCardData } from "@/sanity/lib/types";
 
+type Filters = { type: ShowType | null; today: boolean };
+
 /**
- * The home page's Dates list and Map, driven by one show-type filter.
+ * The home page's Dates list and Map, driven by one set of filters (show
+ * type and "today"). The same chips appear above the list and inside the
+ * big map.
  *
  * `now` is the server's render time. The page HTML is cached, so using the
- * browser's clock here could disagree with it about which dates are still
- * upcoming and break hydration.
+ * browser's clock for the first render could disagree with it about which
+ * dates are upcoming and break hydration. "Today" re-reads the clock when
+ * it's switched on, so a page cached since yesterday still gets it right.
  */
 export function DatesAndMap({ events, now }: { events: EventCardData[]; now: number }) {
-  const [type, setType] = useState<ShowType | null>(null);
+  const [filters, setFilters] = useState<Filters>({ type: null, today: false });
+  const [clock, setClock] = useState(now);
 
   const upcoming = useMemo(
     () => events.filter((event) => isUpcoming(event.startsAt, now)),
     [events, now]
   );
 
-  // Only offer types that have upcoming dates, with how many each has.
-  const options = useMemo(
-    () =>
-      SHOW_TYPES.map((t) => ({
-        ...t,
-        count: upcoming.filter((e) => e.show?.showType === t.value).length,
-      })).filter((t) => t.count > 0),
-    [upcoming]
-  );
+  const todayKey = dayKey(clock);
+  const matchesType = (e: EventCardData, type: ShowType | null) =>
+    type === null || e.show?.showType === type;
+  const matchesDay = (e: EventCardData, today: boolean) =>
+    !today || dayKey(e.startsAt) === todayKey;
+
+  // Offer every type that has upcoming dates, so chips don't vanish when
+  // "Today" is switched on; counts reflect the other active filter.
+  const typeOptions = SHOW_TYPES.filter((t) =>
+    upcoming.some((e) => e.show?.showType === t.value)
+  ).map((t) => ({
+    ...t,
+    count: upcoming.filter((e) => matchesType(e, t.value) && matchesDay(e, filters.today)).length,
+  }));
 
   // A type that no longer has dates (content changed) means "all".
-  const active = options.some((o) => o.value === type) ? type : null;
-  const filtered = useMemo(
-    () => (active ? upcoming.filter((e) => e.show?.showType === active) : upcoming),
-    [upcoming, active]
-  );
+  const type = typeOptions.some((o) => o.value === filters.type) ? filters.type : null;
+  const filtered = upcoming.filter((e) => matchesType(e, type) && matchesDay(e, filters.today));
+  const counts = {
+    all: upcoming.filter((e) => matchesDay(e, filters.today)).length,
+    today: upcoming.filter((e) => matchesType(e, type) && matchesDay(e, true)).length,
+  };
 
   const allVenues = useMemo(() => toMapVenues(upcoming, now), [upcoming, now]);
-  const venues = useMemo(() => toMapVenues(filtered, now), [filtered, now]);
-  const activeTitle = options.find((o) => o.value === active)?.title;
+  const venues = toMapVenues(filtered, now);
+
+  const typeTitle = typeOptions.find((o) => o.value === type)?.title;
+  const label = [typeTitle, filters.today && "today"].filter(Boolean).join(" · ");
+  const emptyText = filters.today
+    ? typeTitle
+      ? `No ${typeTitle} tonight.`
+      : "Nothing on today. Check the other dates!"
+    : typeTitle
+      ? `No ${typeTitle} dates right now.`
+      : "Nothing booked right now. We're probably writing.";
+
+  const filterBar =
+    upcoming.length > 0 ? (
+      <FilterBar
+        type={type}
+        today={filters.today}
+        typeOptions={typeOptions}
+        counts={counts}
+        onType={(next) => setFilters((f) => ({ ...f, type: next }))}
+        onToday={() => {
+          if (!filters.today) setClock(Date.now());
+          setFilters((f) => ({ ...f, today: !f.today }));
+        }}
+      />
+    ) : null;
 
   return (
     <>
@@ -52,61 +88,74 @@ export function DatesAndMap({ events, now }: { events: EventCardData[]; now: num
         <SectionHeading count={filtered.length} note="come early, sit front row">
           Dates
         </SectionHeading>
-
-        {options.length > 0 && (
-          <div
-            role="group"
-            aria-label="Filter dates by show type"
-            className="mb-8 flex flex-wrap gap-3"
-          >
-            <FilterChip pressed={active === null} onClick={() => setType(null)}>
-              All <Count n={upcoming.length} />
-            </FilterChip>
-            {options.map((option) => (
-              <FilterChip
-                key={option.value}
-                pressed={active === option.value}
-                onClick={() => setType(active === option.value ? null : option.value)}
-              >
-                {option.title} <Count n={option.count} />
-              </FilterChip>
-            ))}
-          </div>
-        )}
-
-        <EventList
-          events={filtered}
-          now={now}
-          emptyText={
-            activeTitle
-              ? `No ${activeTitle} dates right now.`
-              : "Nothing booked right now. We're probably writing."
-          }
-        />
+        {filterBar && <div className="mb-8">{filterBar}</div>}
+        <EventList events={filtered} now={now} emptyText={emptyText} />
       </section>
 
       {allVenues.length > 0 && (
         <section id="map" className="mx-auto max-w-6xl scroll-mt-6 px-4 pt-24 sm:px-6">
-          <SectionHeading note={activeTitle ? `${activeTitle} only` : "find a stage near you"}>
+          <SectionHeading note={label ? `${label} only` : "find a stage near you"}>
             Map
           </SectionHeading>
-          <MapSection venues={venues} />
-          {venues.length === 0 && (
-            <p className="mt-4 font-marker text-xl">No {activeTitle} dates on the map yet.</p>
-          )}
+          <MapSection venues={venues} filters={filterBar} emptyText={emptyText} />
+          {venues.length === 0 && <p className="mt-4 font-marker text-xl">{emptyText}</p>}
         </section>
       )}
     </>
   );
 }
 
-function FilterChip({
+function FilterBar({
+  type,
+  today,
+  typeOptions,
+  counts,
+  onType,
+  onToday,
+}: {
+  type: ShowType | null;
+  today: boolean;
+  typeOptions: { value: ShowType; title: string; count: number }[];
+  counts: { all: number; today: number };
+  onType: (type: ShowType | null) => void;
+  onToday: () => void;
+}) {
+  return (
+    <div role="group" aria-label="Filter dates" className="flex flex-wrap items-center gap-3">
+      <Chip pressed={today} onClick={onToday} accent>
+        Today <Count n={counts.today} />
+      </Chip>
+      {typeOptions.length > 0 && (
+        <>
+          <span aria-hidden className="h-8 w-[3px] bg-ink" />
+          <Chip pressed={type === null} onClick={() => onType(null)}>
+            All types <Count n={counts.all} />
+          </Chip>
+          {typeOptions.map((option) => (
+            <Chip
+              key={option.value}
+              pressed={type === option.value}
+              onClick={() => onType(type === option.value ? null : option.value)}
+            >
+              {option.title} <Count n={option.count} />
+            </Chip>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Chip({
   pressed,
   onClick,
+  accent = false,
   children,
 }: {
   pressed: boolean;
   onClick: () => void;
+  /** Yellow when off, so "Today" stands apart from the type chips */
+  accent?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -117,7 +166,7 @@ function FilterChip({
       className={`border-[3px] border-ink px-3 py-1.5 font-mono text-sm font-bold uppercase transition-transform ${
         pressed
           ? "-rotate-2 bg-ink text-paper shadow-[4px_4px_0_var(--red)]"
-          : "bg-paper hover:-rotate-1 hover:bg-yellow"
+          : `${accent ? "bg-yellow" : "bg-paper"} hover:-rotate-1 hover:bg-yellow`
       }`}
     >
       {children}
