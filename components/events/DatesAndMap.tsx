@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { EventList } from "@/components/events/EventList";
 import { MapSection } from "@/components/map/MapSection";
@@ -11,6 +11,8 @@ import { SHOW_TYPES, type ShowType } from "@/lib/showTypes";
 import type { EventCardData } from "@/sanity/lib/types";
 
 type Filters = { type: ShowType | null; today: boolean };
+
+const PAGE_SIZE = 10;
 
 /**
  * The home page's Dates list and Map, driven by one set of filters (show
@@ -25,6 +27,8 @@ type Filters = { type: ShowType | null; today: boolean };
 export function DatesAndMap({ events, now }: { events: EventCardData[]; now: number }) {
   const [filters, setFilters] = useState<Filters>({ type: null, today: false });
   const [clock, setClock] = useState(now);
+  const [page, setPage] = useState(0);
+  const sectionRef = useRef<HTMLElement>(null);
 
   const upcoming = useMemo(
     () => events.filter((event) => isUpcoming(event.startsAt, now)),
@@ -54,6 +58,15 @@ export function DatesAndMap({ events, now }: { events: EventCardData[]; now: num
     today: upcoming.filter((e) => matchesType(e, type) && matchesDay(e, true)).length,
   };
 
+  // The list is paged; the map always shows every filtered date.
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageEvents = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const goToPage = (next: number) => {
+    setPage(next);
+    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const allVenues = useMemo(() => toMapVenues(upcoming, now), [upcoming, now]);
   const venues = toMapVenues(filtered, now);
 
@@ -74,9 +87,13 @@ export function DatesAndMap({ events, now }: { events: EventCardData[]; now: num
         today={filters.today}
         typeOptions={typeOptions}
         counts={counts}
-        onType={(next) => setFilters((f) => ({ ...f, type: next }))}
+        onType={(next) => {
+          setPage(0);
+          setFilters((f) => ({ ...f, type: next }));
+        }}
         onToday={() => {
           if (!filters.today) setClock(Date.now());
+          setPage(0);
           setFilters((f) => ({ ...f, today: !f.today }));
         }}
       />
@@ -84,12 +101,15 @@ export function DatesAndMap({ events, now }: { events: EventCardData[]; now: num
 
   return (
     <>
-      <section id="events" className="mx-auto max-w-6xl scroll-mt-6 px-4 pt-20 sm:px-6">
+      <section ref={sectionRef} id="events" className="mx-auto max-w-6xl scroll-mt-6 px-4 pt-20 sm:px-6">
         <SectionHeading count={filtered.length} note="come early, sit front row">
           Dates
         </SectionHeading>
         {filterBar && <div className="mb-8">{filterBar}</div>}
-        <EventList events={filtered} now={now} emptyText={emptyText} />
+        <EventList events={pageEvents} now={now} emptyText={emptyText} />
+        {pageCount > 1 && (
+          <Pagination page={currentPage} pageCount={pageCount} onPage={goToPage} />
+        )}
       </section>
 
       {allVenues.length > 0 && (
@@ -102,6 +122,52 @@ export function DatesAndMap({ events, now }: { events: EventCardData[]; now: num
         </section>
       )}
     </>
+  );
+}
+
+function Pagination({
+  page,
+  pageCount,
+  onPage,
+}: {
+  page: number;
+  pageCount: number;
+  onPage: (page: number) => void;
+}) {
+  const button =
+    "border-[3px] border-ink px-3 py-1.5 font-mono text-sm font-bold uppercase transition-transform";
+  const idle = `${button} bg-paper hover:-rotate-1 hover:bg-yellow disabled:pointer-events-none disabled:opacity-30`;
+
+  return (
+    <nav aria-label="Dates pages" className="mt-8 flex flex-wrap items-center gap-3">
+      <button type="button" className={idle} disabled={page === 0} onClick={() => onPage(page - 1)}>
+        ← Earlier
+      </button>
+      {Array.from({ length: pageCount }, (_, i) => (
+        <button
+          key={i}
+          type="button"
+          aria-current={i === page ? "page" : undefined}
+          aria-label={`Page ${i + 1}`}
+          onClick={() => onPage(i)}
+          className={
+            i === page
+              ? `${button} -rotate-2 bg-ink text-paper shadow-[4px_4px_0_var(--red)]`
+              : idle
+          }
+        >
+          {i + 1}
+        </button>
+      ))}
+      <button
+        type="button"
+        className={idle}
+        disabled={page === pageCount - 1}
+        onClick={() => onPage(page + 1)}
+      >
+        Later →
+      </button>
+    </nav>
   );
 }
 
