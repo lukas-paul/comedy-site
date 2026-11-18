@@ -72,6 +72,7 @@ export function EventbriteImportTool() {
   const [shows, setShows] = useState<Show[]>([]);
   const [showId, setShowId] = useState("");
   const [includeContent, setIncludeContent] = useState(true);
+  const [publish, setPublish] = useState(false);
   // Some shows list a whole year of dates; import a batch at a time.
   const [maxImport, setMaxImport] = useState(DEFAULT_MAX_IMPORT);
   const limit = parseLimit(maxImport);
@@ -159,7 +160,7 @@ export function EventbriteImportTool() {
       const res = await importEvents(
         client,
         toImport,
-        { showId: showId || undefined, includeContent },
+        { showId: showId || undefined, includeContent, publish },
         setProgress
       );
       setResults(res);
@@ -209,7 +210,8 @@ export function EventbriteImportTool() {
           </Heading>
           <Text muted size={2}>
             Paste an organizer page (…/o/…) or a single event (…/e/…). Imported events are
-            saved as drafts, so you can check them before publishing.
+            saved as drafts so you can check them before publishing, unless you choose to
+            publish them right away.
           </Text>
         </Stack>
 
@@ -299,6 +301,16 @@ export function EventbriteImportTool() {
                     {showId ? " (otherwise the show's are used)" : ""}
                   </Text>
                 </Flex>
+                <Flex as="label" align="center" gap={2}>
+                  <Checkbox
+                    checked={publish}
+                    disabled={importing}
+                    onChange={(e) => setPublish(e.currentTarget.checked)}
+                  />
+                  <Text size={1}>
+                    Publish immediately — events go live on the site without a review step
+                  </Text>
+                </Flex>
               </Stack>
             </Card>
 
@@ -342,7 +354,9 @@ export function EventbriteImportTool() {
               {preview.events.map((ev) => {
                 const docId = importedAs.get(ev.eventbriteId);
                 const duplicate = !docId ? possibleDuplicate(ev) : undefined;
-                const failed = results?.find((r) => r.eventbriteId === ev.eventbriteId && !r.ok);
+                const result = results?.find((r) => r.eventbriteId === ev.eventbriteId);
+                const failed = result && !result.ok ? result : undefined;
+                const keptDraft = result?.ok ? result.draftReason : undefined;
                 return (
                   <Card
                     key={ev.eventbriteId}
@@ -402,9 +416,8 @@ export function EventbriteImportTool() {
                             </IntentLink>
                           </Text>
                         )}
-                        {failed && !failed.ok && (
-                          <Text size={1}>❌ {failed.message}</Text>
-                        )}
+                        {failed && <Text size={1}>❌ {failed.message}</Text>}
+                        {keptDraft && <Text size={1}>📝 {keptDraft}</Text>}
                       </Stack>
                     </Flex>
                   </Card>
@@ -421,18 +434,41 @@ export function EventbriteImportTool() {
               </Card>
             )}
 
-            {results && (
-              <Card padding={3} radius={2} tone="positive" border>
-                <Text size={1}>
-                  Imported {results.filter((r) => r.ok).length} of {results.length} as drafts.
-                  Open them from the list above, or under Events → Upcoming, to review and
-                  publish.
-                </Text>
-              </Card>
-            )}
+            {results && <ResultSummary results={results} />}
           </Stack>
         )}
       </Stack>
     </Container>
+  );
+}
+
+function ResultSummary({ results }: { results: ImportResult[] }) {
+  const ok = results.flatMap((r) => (r.ok ? [r] : []));
+  const published = ok.filter((r) => r.published).length;
+  const drafts = ok.length - published;
+  const failed = results.length - ok.length;
+
+  return (
+    <Card padding={3} radius={2} tone={failed ? "caution" : "positive"} border>
+      <Stack gap={2}>
+        <Text size={1}>
+          Imported {ok.length} of {results.length}
+          {published > 0 && `: ${published} published`}
+          {published > 0 && drafts > 0 && `, ${drafts} as drafts`}
+          {published === 0 && " as drafts"}.
+        </Text>
+        {drafts > 0 && (
+          <Text size={1} muted>
+            Open the drafts from the list above, or under Events → Upcoming, to review and
+            publish.
+          </Text>
+        )}
+        {published > 0 && (
+          <Text size={1} muted>
+            Published events are live and show up on the site once it refreshes.
+          </Text>
+        )}
+      </Stack>
+    </Card>
   );
 }

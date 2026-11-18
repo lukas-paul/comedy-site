@@ -7,10 +7,19 @@ export type ImportOptions = {
   showId?: string;
   /** Copy Eventbrite's image and description (otherwise the show's are used). */
   includeContent: boolean;
+  /** Create events published instead of as drafts to review. */
+  publish: boolean;
 };
 
 export type ImportResult =
-  | { eventbriteId: string; ok: true; documentId: string }
+  | {
+      eventbriteId: string;
+      ok: true;
+      documentId: string;
+      published: boolean;
+      /** Why an event asked to be published was saved as a draft instead */
+      draftReason?: string;
+    }
   | { eventbriteId: string; ok: false; message: string };
 
 type VenueDoc = {
@@ -28,9 +37,10 @@ type VenueRef = { id: string; published: boolean };
 export const eventDocumentId = (eventbriteId: string) => `eventbrite-${eventbriteId}`;
 
 /**
- * Creates one draft event per Eventbrite event, using the Studio user's own
- * client (and therefore their permissions). Venues are matched against
- * existing ones by name or address and created when missing.
+ * Creates one event per Eventbrite event — a draft, or published when
+ * `options.publish` is set — using the Studio user's own client (and
+ * therefore their permissions). Venues are matched against existing ones by
+ * name or address and created when missing.
  */
 export async function importEvents(
   client: SanityClient,
@@ -64,9 +74,15 @@ export async function importEvents(
         assetId = await assetIds.get(event.imageUrl);
       }
 
-      const draftId = `drafts.${eventDocumentId(event.eventbriteId)}`;
+      // A published event can't reference a venue that only exists as a
+      // draft, so such events stay drafts until the venue is published.
+      const venueBlocksPublish = venueRef !== undefined && !venueRef.published;
+      const published = options.publish && !venueBlocksPublish;
+      const documentId = published
+        ? eventDocumentId(event.eventbriteId)
+        : `drafts.${eventDocumentId(event.eventbriteId)}`;
       await client.createIfNotExists({
-        _id: draftId,
+        _id: documentId,
         _type: "event",
         eventbriteId: event.eventbriteId,
         title: event.title,
@@ -85,7 +101,15 @@ export async function importEvents(
           ? { description: textToBlocks(event.description) }
           : {}),
       });
-      results.push({ eventbriteId: event.eventbriteId, ok: true, documentId: draftId });
+      results.push({
+        eventbriteId: event.eventbriteId,
+        ok: true,
+        documentId,
+        published,
+        ...(options.publish && !published
+          ? { draftReason: "Saved as a draft: its venue isn't published yet." }
+          : {}),
+      });
     } catch (err) {
       results.push({
         eventbriteId: event.eventbriteId,
