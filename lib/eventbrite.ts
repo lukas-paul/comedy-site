@@ -5,6 +5,9 @@
 //   organizer: https://www.eventbrite.de/o/riff-city-121190972731
 //   event:     https://www.eventbrite.de/e/some-show-tickets-2002327794334
 //
+// Recurring events ("series") are expanded into one entry per date, read
+// from the same endpoint Eventbrite's own date picker uses.
+//
 // This is scraping: if Eventbrite changes its markup, only this file should
 // need to change.
 
@@ -34,6 +37,8 @@ export type EventbriteEvent = {
   venue?: EventbriteVenue;
   lineup: string[];
   imageUrl?: string;
+  /** Set when this is one date of a recurring Eventbrite series. */
+  seriesId?: string;
 };
 
 export type EventbriteLink =
@@ -42,6 +47,9 @@ export type EventbriteLink =
 
 /** Hard cap so one organizer link can't trigger an unbounded number of fetches. */
 export const MAX_EVENTS = 50;
+
+/** Dates read per recurring series (a weekly show for two years fits). */
+export const MAX_SERIES_DATES = 120;
 
 const FETCH_CONCURRENCY = 4;
 const FETCH_TIMEOUT_MS = 10_000;
@@ -105,7 +113,7 @@ export async function fetchEventbriteEvents(input: string): Promise<{
 
   const results = await mapWithConcurrency(ids, FETCH_CONCURRENCY, async (id) => {
     try {
-      return { ok: true as const, event: await fetchEvent(origin, id) };
+      return { ok: true as const, events: await fetchEvent(origin, id) };
     } catch (err) {
       return {
         ok: false as const,
@@ -114,9 +122,12 @@ export async function fetchEventbriteEvents(input: string): Promise<{
     }
   });
 
-  const events = results
-    .flatMap((r) => (r.ok ? [r.event] : []))
-    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  // An organizer page can link a series and some of its dates; keep each once.
+  const byId = new Map<string, EventbriteEvent>();
+  for (const r of results) {
+    if (r.ok) for (const event of r.events) byId.set(event.eventbriteId, event);
+  }
+  const events = [...byId.values()].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const errors = results.flatMap((r) => (r.ok ? [] : [r.error]));
   return { events, errors };
 }
@@ -134,15 +145,103 @@ async function fetchOrganizerEventIds(url: string): Promise<string[]> {
   return [...ids];
 }
 
-async function fetchEvent(origin: string, id: string): Promise<EventbriteEvent> {
+/** One event, or every upcoming date when the link points into a series. */
+async function fetchEvent(origin: string, id: string): Promise<EventbriteEvent[]> {
   // /e/<id> redirects to the canonical slugged URL.
   const html = await fetchHtml(`${origin}/e/${id}`);
   const data = findJsonLdEvent(html);
   if (!data) throw new EventbriteError("No event data found on the event page.", 502);
-  return mapEvent(id, data);
+
+  const seriesId = html.match(/"isSeries":true[^}]*?"seriesId":"(\d+)"/)?.[1];
+  if (!seriesId) return [mapEvent(id, data)];
+
+  // For a series, the page's event data spans the whole run (first date to
+  // last), so its start date is not a real show date.
+  const base = mapEvent(seriesId, data);
+  try {
+    const dates = await fetchSeriesDates(origin, seriesId);
+    return dates.map((date) => ({ ...base, ...date, seriesId }));
+  } catch {
+    // Fall back to the one date the page itself names.
+    const next = parseOffsetDate(html.match(/"nextAvailableSession":"([^"]+)"/)?.[1]);
+    if (!next) throw new EventbriteError("Couldn't read the dates of this recurring event.", 502);
+    return [{ ...base, startsAt: next, endsAt: undefined, seriesId }];
+  }
+}
+
+type SeriesDate = Pick<EventbriteEvent, "eventbriteId" | "url" | "startsAt" | "endsAt"> &
+  Partial<Pick<EventbriteEvent, "title" | "status">>;
+
+/** Upcoming dates of a series, from the endpoint behind the page's date picker. */
+async function fetchSeriesDates(origin: string, seriesId: string): Promise<SeriesDate[]> {
+  type Page = {
+    events?: {
+      id?: string;
+      url?: string;
+      name?: { text?: string };
+      start?: { utc?: string };
+      end?: { utc?: string };
+      status?: string;
+    }[];
+    pagination?: { has_more_items?: boolean; continuation?: string };
+  };
+
+  const dates: SeriesDate[] = [];
+  let continuation: string | undefined;
+  do {
+    const url = new URL(`${origin}/api/v3/series/${seriesId}/events/`);
+    url.searchParams.set("time_filter", "current_future");
+    url.searchParams.set("page_size", "50");
+    if (continuation) url.searchParams.set("continuation", continuation);
+
+    const page = (await fetchJson(url.toString())) as Page;
+    for (const e of page.events ?? []) {
+      const start = e.start?.utc;
+      if (!e.id || !start || Number.isNaN(Date.parse(start))) continue;
+      if (e.status === "ended" || e.status === "completed" || e.status === "draft") continue;
+      dates.push({
+        eventbriteId: e.id,
+        url: stripQuery(e.url) ?? `${origin}/e/${e.id}`,
+        startsAt: new Date(start).toISOString(),
+        endsAt: e.end?.utc ? new Date(e.end.utc).toISOString() : undefined,
+        ...(e.name?.text ? { title: decodeEntities(e.name.text) } : {}),
+        ...(e.status === "canceled" ? { status: "cancelled" as const } : {}),
+      });
+      if (dates.length >= MAX_SERIES_DATES) return dates;
+    }
+    continuation = page.pagination?.has_more_items ? page.pagination.continuation : undefined;
+  } while (continuation);
+
+  if (dates.length === 0) throw new EventbriteError("This recurring event has no upcoming dates.", 404);
+  return dates;
+}
+
+/** "2026-11-19T20:00:00+01" (Eventbrite drops the offset's minutes) → UTC ISO */
+function parseOffsetDate(value: string | undefined) {
+  if (!value) return undefined;
+  const iso = /[+-]\d\d$/.test(value) ? `${value}:00` : value;
+  const time = Date.parse(iso);
+  return Number.isNaN(time) ? undefined : new Date(time).toISOString();
+}
+
+async function fetchJson(url: string): Promise<unknown> {
+  const res = await eventbriteFetch(url, "application/json");
+  if (!res.ok) throw new EventbriteError(`Eventbrite answered ${res.status}.`, 502);
+  try {
+    return await res.json();
+  } catch {
+    throw new EventbriteError("Eventbrite sent something unexpected.", 502);
+  }
 }
 
 async function fetchHtml(url: string): Promise<string> {
+  const res = await eventbriteFetch(url, "text/html");
+  if (res.status === 404) throw new EventbriteError("Eventbrite page not found.", 404);
+  if (!res.ok) throw new EventbriteError(`Eventbrite answered ${res.status}.`, 502);
+  return res.text();
+}
+
+async function eventbriteFetch(url: string, accept: string): Promise<Response> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -151,6 +250,7 @@ async function fetchHtml(url: string): Promise<string> {
         "User-Agent":
           "Mozilla/5.0 (compatible; comedy-site-importer/1.0)",
         "Accept-Language": "en",
+        Accept: accept,
       },
       redirect: "follow",
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -162,9 +262,7 @@ async function fetchHtml(url: string): Promise<string> {
   if (!HOST_RE.test(new URL(res.url).hostname)) {
     throw new EventbriteError("Eventbrite redirected somewhere unexpected.", 502);
   }
-  if (res.status === 404) throw new EventbriteError("Eventbrite page not found.", 404);
-  if (!res.ok) throw new EventbriteError(`Eventbrite answered ${res.status}.`, 502);
-  return res.text();
+  return res;
 }
 
 // --- JSON-LD parsing -------------------------------------------------------

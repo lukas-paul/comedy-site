@@ -96,10 +96,12 @@ export function EventbriteImportTool() {
     return map;
   }, [existing]);
 
+  // Same start time but a different (or no) Eventbrite ID: entered by hand,
+  // or imported earlier from the series itself rather than this exact date.
   const possibleDuplicate = (event: EventbriteEvent) =>
     existing.find(
       (doc) =>
-        !doc.eventbriteId &&
+        doc.eventbriteId !== event.eventbriteId &&
         doc.startsAt &&
         new Date(doc.startsAt).getTime() === new Date(event.startsAt).getTime()
     );
@@ -194,6 +196,7 @@ export function EventbriteImportTool() {
 
   const selectable = preview?.events.filter((ev) => !importedAs.has(ev.eventbriteId)) ?? [];
   const atLimit = selected.size >= limit;
+  const seriesDates = preview?.events.filter((ev) => ev.seriesId).length ?? 0;
   const allSelected =
     selectable.length > 0 && selected.size >= Math.min(limit, selectable.length);
 
@@ -316,6 +319,8 @@ export function EventbriteImportTool() {
                 />
                 <Text size={1} weight="medium">
                   {preview.events.length} event{preview.events.length === 1 ? "" : "s"} found
+                  {seriesDates > 0 &&
+                    ` (${seriesDates === preview.events.length ? "all" : seriesDates} from recurring series)`}
                   {Number.isFinite(limit) && selectable.length > limit
                     ? ` · at most ${limit} per import`
                     : ""}
@@ -367,6 +372,7 @@ export function EventbriteImportTool() {
                           <Badge tone={ev.status === "cancelled" ? "critical" : ev.status === "soldOut" ? "caution" : "default"}>
                             {STATUS_LABEL[ev.status]}
                           </Badge>
+                          {ev.seriesId && <Badge tone="primary">Recurring</Badge>}
                           {docId && (
                             <Badge tone="positive">
                               <IntentLink intent="edit" params={{ id: docId, type: "event" }}>
