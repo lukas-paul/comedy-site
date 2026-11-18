@@ -1,6 +1,7 @@
 import type { SanityClient } from "sanity";
 
 import type { EventbriteEvent, EventbriteVenue } from "../../../lib/eventbrite";
+import { geocodeVenue } from "../../lib/geocode";
 
 export type ImportOptions = {
   /** Show to attach the events to, or undefined for one-off events. */
@@ -145,19 +146,23 @@ async function findOrCreateVenue(
       : undefined);
   if (match) {
     const id = match._id.replace(/^drafts\./, "");
-    // Backfill coordinates on venues created before they were imported.
-    if (!match.hasLocation && venue.lat !== undefined && venue.lng !== undefined) {
-      await client
-        .patch(match._id)
-        .setIfMissing({ location: { _type: "geopoint", lat: venue.lat, lng: venue.lng } })
-        .commit()
-        .catch(() => undefined);
+    // Backfill coordinates on venues that don't have any yet.
+    if (!match.hasLocation) {
+      const location = await venueLocation(venue);
+      if (location) {
+        await client
+          .patch(match._id)
+          .setIfMissing({ location })
+          .commit()
+          .catch(() => undefined);
+      }
     }
     return { id, published: venues.some((v) => v._id === id) };
   }
 
   // Venues are plain reference data, so they're created published: a draft
   // event can't be published while it references an unpublished venue.
+  const location = await venueLocation(venue);
   const created = await client.createIfNotExists({
     _id: `eventbrite-venue-${slugify(venue.name)}`,
     _type: "venue",
@@ -165,9 +170,7 @@ async function findOrCreateVenue(
     ...(venue.address ? { address: venue.address } : {}),
     ...(venue.postalCode ? { postalCode: venue.postalCode } : {}),
     ...(venue.city ? { city: venue.city } : {}),
-    ...(venue.lat !== undefined && venue.lng !== undefined
-      ? { location: { _type: "geopoint", lat: venue.lat, lng: venue.lng } }
-      : {}),
+    ...(location ? { location } : {}),
     mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
       [venue.name, venue.address, [venue.postalCode, venue.city].filter(Boolean).join(" ")]
         .filter(Boolean)
@@ -175,6 +178,21 @@ async function findOrCreateVenue(
     )}`,
   });
   return { id: created._id, published: true };
+}
+
+/**
+ * Coordinates for the site's map: Eventbrite's own when it has them,
+ * otherwise looked up from the address. Never fails the import.
+ */
+async function venueLocation(venue: EventbriteVenue) {
+  let lat = venue.lat;
+  let lng = venue.lng;
+  if (lat === undefined || lng === undefined) {
+    const hit = await geocodeVenue(venue).catch(() => null);
+    if (!hit) return undefined;
+    ({ lat, lng } = hit);
+  }
+  return { _type: "geopoint" as const, lat, lng };
 }
 
 /**

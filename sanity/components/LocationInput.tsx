@@ -7,6 +7,8 @@ import {
   useFormValue,
 } from "sanity";
 
+import { geocodeVenue } from "../lib/geocode";
+
 type Geopoint = { _type: "geopoint"; lat?: number; lng?: number };
 
 /**
@@ -41,17 +43,14 @@ export function LocationInput(props: ObjectInputProps<Geopoint>) {
   };
 
   const lookup = async () => {
-    const query = [address, [postalCode, city].filter(Boolean).join(" ")]
-      .filter(Boolean)
-      .join(", ");
-    if (!query) {
+    if (!address || !city) {
       setStatus({ tone: "critical", text: "Fill in the street address and city first." });
       return;
     }
     setLoading(true);
     setStatus(undefined);
     try {
-      const results = (await geocode(query)) ?? (name ? await geocode(`${name}, ${city ?? ""}`) : null);
+      const results = await geocodeVenue({ name, address, postalCode, city });
       if (!results) {
         setStatus({ tone: "critical", text: "No match found. Enter the coordinates by hand." });
         return;
@@ -119,14 +118,3 @@ export function LocationInput(props: ObjectInputProps<Geopoint>) {
   );
 }
 
-async function geocode(query: string) {
-  const url = new URL("https://nominatim.openstreetmap.org/search");
-  url.searchParams.set("q", query);
-  url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("limit", "1");
-  const res = await fetch(url, { headers: { "Accept-Language": "en" } });
-  if (!res.ok) throw new Error(`Nominatim answered ${res.status}`);
-  const [hit] = (await res.json()) as { lat: string; lon: string; display_name: string }[];
-  if (!hit) return null;
-  return { lat: Number(hit.lat), lng: Number(hit.lon), label: hit.display_name };
-}
