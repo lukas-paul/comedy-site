@@ -38,6 +38,27 @@ const STATUS_LABEL: Record<EventbriteEvent["status"], string> = {
 
 const publishedId = (id: string) => id.replace(/^drafts\./, "");
 
+const DEFAULT_MAX_IMPORT = "10";
+
+/** "10" → 10; empty, zero or junk → no limit */
+function parseLimit(value: string) {
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : Infinity;
+}
+
+/**
+ * The soonest events worth importing: not imported yet and not cancelled.
+ * Events arrive sorted by start time.
+ */
+function soonestImportable(events: EventbriteEvent[], imported: Set<string>, limit: number) {
+  return new Set(
+    events
+      .filter((ev) => !imported.has(ev.eventbriteId) && ev.status !== "cancelled")
+      .slice(0, limit)
+      .map((ev) => ev.eventbriteId)
+  );
+}
+
 export function EventbriteImportTool() {
   const client = useClient({ apiVersion });
 
@@ -51,6 +72,9 @@ export function EventbriteImportTool() {
   const [shows, setShows] = useState<Show[]>([]);
   const [showId, setShowId] = useState("");
   const [includeContent, setIncludeContent] = useState(true);
+  // Some shows list a whole year of dates; import a batch at a time.
+  const [maxImport, setMaxImport] = useState(DEFAULT_MAX_IMPORT);
+  const limit = parseLimit(maxImport);
 
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -105,17 +129,13 @@ export function EventbriteImportTool() {
           times: data.events.map((ev) => ev.startsAt),
         }
       );
-      const imported = new Set(docs.map((d) => d.eventbriteId).filter(Boolean));
+      const imported = new Set(
+        docs.map((d) => d.eventbriteId).filter((id): id is string => Boolean(id))
+      );
 
       setExisting(docs);
       setPreview(data);
-      setSelected(
-        new Set(
-          data.events
-            .filter((ev) => !imported.has(ev.eventbriteId) && ev.status !== "cancelled")
-            .map((ev) => ev.eventbriteId)
-        )
-      );
+      setSelected(soonestImportable(data.events, imported, limit));
       // Preselect the show whose name appears in the event titles.
       const firstTitle = data.events[0]?.title.toLowerCase() ?? "";
       const match = shows.find((s) => s.title && firstTitle.includes(s.title.toLowerCase()));
@@ -154,6 +174,15 @@ export function EventbriteImportTool() {
     }
   }
 
+  function changeLimit(value: string) {
+    setMaxImport(value);
+    if (preview) {
+      setSelected(
+        soonestImportable(preview.events, new Set(importedAs.keys()), parseLimit(value))
+      );
+    }
+  }
+
   function toggle(id: string, on: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -164,7 +193,9 @@ export function EventbriteImportTool() {
   }
 
   const selectable = preview?.events.filter((ev) => !importedAs.has(ev.eventbriteId)) ?? [];
-  const allSelected = selectable.length > 0 && selectable.every((ev) => selected.has(ev.eventbriteId));
+  const atLimit = selected.size >= limit;
+  const allSelected =
+    selectable.length > 0 && selected.size >= Math.min(limit, selectable.length);
 
   return (
     <Container width={2} paddingX={4} paddingY={5}>
@@ -234,7 +265,27 @@ export function EventbriteImportTool() {
                       </Select>
                     </Stack>
                   </Box>
+                  <Box style={{ width: 160 }}>
+                    <Stack gap={2}>
+                      <Text size={1} weight="medium">
+                        Import at most
+                      </Text>
+                      <TextInput
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        value={maxImport}
+                        onChange={(e) => changeLimit(e.currentTarget.value)}
+                        placeholder="No limit"
+                        disabled={importing}
+                        aria-describedby="max-import-help"
+                      />
+                    </Stack>
+                  </Box>
                 </Flex>
+                <Text id="max-import-help" size={1} muted>
+                  The soonest events are picked first. Leave empty to allow all.
+                </Text>
                 <Flex as="label" align="center" gap={2}>
                   <Checkbox
                     checked={includeContent}
@@ -256,11 +307,18 @@ export function EventbriteImportTool() {
                   disabled={selectable.length === 0}
                   onChange={(e) => {
                     const on = e.currentTarget.checked;
-                    setSelected(on ? new Set(selectable.map((ev) => ev.eventbriteId)) : new Set());
+                    setSelected(
+                      on
+                        ? new Set(selectable.slice(0, limit).map((ev) => ev.eventbriteId))
+                        : new Set()
+                    );
                   }}
                 />
                 <Text size={1} weight="medium">
                   {preview.events.length} event{preview.events.length === 1 ? "" : "s"} found
+                  {Number.isFinite(limit) && selectable.length > limit
+                    ? ` · at most ${limit} per import`
+                    : ""}
                 </Text>
               </Flex>
               <Button
@@ -292,7 +350,11 @@ export function EventbriteImportTool() {
                       <Box paddingTop={1}>
                         <Checkbox
                           checked={!docId && selected.has(ev.eventbriteId)}
-                          disabled={Boolean(docId) || importing}
+                          disabled={
+                            Boolean(docId) ||
+                            importing ||
+                            (atLimit && !selected.has(ev.eventbriteId))
+                          }
                           onChange={(e) => toggle(ev.eventbriteId, e.currentTarget.checked)}
                           aria-label={`Import ${ev.title}`}
                         />
