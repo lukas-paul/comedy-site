@@ -31,7 +31,8 @@ export default function VenueMap({
   /** false for the static preview: no panning, zooming or marker clicks */
   interactive?: boolean;
   selectedId?: string | null;
-  onSelect?: (id: string) => void;
+  /** A venue's id when its pin is clicked; null when the empty map is clicked */
+  onSelect?: (id: string | null) => void;
   /** The visitor's position, once they've shared it */
   user?: LatLng | null;
 }) {
@@ -65,6 +66,10 @@ export default function VenueMap({
       attribution: TILE_ATTRIBUTION,
       maxZoom: 19,
     }).addTo(map);
+
+    // Clicking the map itself (not a pin, not a drag) clears the selection.
+    // Leaflet doesn't pass marker clicks on to the map.
+    if (interactive) map.on("click", () => onSelectRef.current?.(null));
 
     markersRef.current = L.layerGroup().addTo(map);
     userLayerRef.current = L.layerGroup().addTo(map);
@@ -125,11 +130,20 @@ export default function VenueMap({
     }
   }, [venues, selectedId, interactive]);
 
-  // Fly to the selected venue.
+  // Fly to the selected venue; when the selection is cleared, zoom back out
+  // to show every venue.
+  const previousSelectedRef = useRef(selectedId);
   useEffect(() => {
     const map = mapRef.current;
+    const hadSelection = previousSelectedRef.current !== null;
+    previousSelectedRef.current = selectedId;
+    if (!map) return;
+    if (selectedId === null) {
+      if (hadSelection && venues.length > 0) fitVenues(map, venues, true);
+      return;
+    }
     const venue = venues.find((v) => v.id === selectedId);
-    if (!map || !venue) return;
+    if (!venue) return;
     map.flyTo([venue.lat, venue.lng], Math.max(map.getZoom(), 15), { duration: 0.6 });
   }, [selectedId, venues]);
 
